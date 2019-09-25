@@ -24,7 +24,7 @@ for n=1:numel(filenames)
     SR_ids{n}=shock_id;
     shock_responsetrial=[shock_responsetrial;shock_response];
     shock_responsemean=[shock_responsemean;meanresponse_shock];
-    shockdayresponse=[shockdayresponse; sigt(shock_id,animal{n}.session_start(4)+animal{n}.frame_shock(1)-600:animal{n}.session_start(4)+animal{n}.frame_shock(1)+4000)];
+    shockdayresponse=[shockdayresponse; sigt(shock_id,animal{n}.frame(1)-600:animal{n}.shock_start(1)+4000)];
 end
 
 binsize=10;

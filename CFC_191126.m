@@ -266,7 +266,7 @@ for i=1:vid_dur
 %             end
 %         end
     elseif i==pre_dur+shock_dur+1
-        delete(sh);
+        delete(sh); 
     end
     writeVideo(v_out,getframe(gca));
 end
