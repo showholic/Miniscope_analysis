@@ -186,6 +186,73 @@ title('Mean Response');
 saveas(f,fullfile(filepath,'shock_response.png'))
 save('E:\Miniscope_Chenhaoshan\all_animal\processed_191086.mat','shockts','ms_start', ...
     'shock_start','protocol','ms','shock_response','shock_responsemean');
+
+%% Define shock responsive cells using shuffling 
+cdn_sig = sig(:,session_start(4):session_start(4)+3599);
+cdn_sig(cdn_sig<0)=0;
+pre_dur=100;
+post_dur=100;
+n_shuffle=1000;
+AUC_shock=zeros(size(cdn_sig,1),numel(frame_shock));
+AUC_shock_shuffle=zeros(n_shuffle,size(cdn_sig,1),numel(frame_shock));
+for s=1:numel(frame_shock)
+    postshocktemp=cdn_sig(:,frame_shock(s):frame_shock(s)+post_dur-1);
+    for n=1:size(cdn_sig)
+        AUC_shock(n,s)=trapz(postshocktemp(n,:));
+    end
+end
+% Shuffle signals (not recommended)
+for x= 1: n_shuffle
+    for n=1:size(cdn_sig)
+        sigshuffle=shuffle_sig(cdn_sig(n,:),500,6);
+        for s=1:numel(frame_shock)
+            postshocktemp=sigshuffle(:,frame_shock(s):frame_shock(s)+post_dur-1);
+            AUC_shock_shuffle(x,n,s)=trapz(postshocktemp);
+        end
+    end
+end
+%% Visualize bootstrap shock
+shocksigre=zeros(size(cdn_sig,1),numel(frame_shock));
+%ts = tinv([0.01  0.99],length(AUCshuffle)-1);      % T-Score
+ts=[-1.65 1.65];
+for n=1:size(cdn_sig,1)
+    for s=1:numel(frame_shock)
+        AUCshuffle=AUC_shock_shuffle(:,n,s);
+        AUC=AUC_shock(n,s);
+        SEM = std(AUCshuffle);%/sqrt(length(AUCshuffle));               % Standard Error
+       
+        CI = mean(AUCshuffle) + ts*SEM;    
+        if AUC>=CI(2)
+            shocksigre(n,s)=1;
+        elseif AUC<=CI(1)
+            shocksigre(n,s)=-1;
+        else
+            shocksigre(n,s)=0;
+        end
+    end
+end
+idtemp=find(sum(shocksigre,2)>=1); %Chnage this number to select robustness 
+f=figure;
+responsetemp=shock_responsemean(idtemp,pre_dur+1:end);
+[valmax,indmax]=max(responsetemp,[],2);
+[~,indsort]=sort(indmax);
+SR_shuffle_id=idtemp(indsort);
+for s=1:numel(frame_shock)
+    ax=subplot(1,4,s);
+    imagesc('XData',t,'CData',shock_response(SR_shuffle_id,:,s),[0 zscorethreshold]);
+    axis tight;
+    ax.YLim=[0.5 length(SR_shuffle_id)+0.5];    
+    hold on;
+    area([0; 2],[ax.YLim; ax.YLim],'FaceAlpha',0.2,'FaceColor','r','LineStyle','none')
+    title(['Shock #' num2str(s)]);
+end
+ax=subplot(1,4,4);
+imagesc('XData',t,'CData',shock_responsemean(SR_shuffle_id,:),[0 zscorethreshold]);
+axis tight;
+ax.YLim=[0.5 length(SR_shuffle_id)+0.5]; 
+hold on;
+area([0; 2],[ax.YLim; ax.YLim],'FaceAlpha',0.2,'FaceColor','r','LineStyle','none')
+title('Mean Response');
 %% Use the same baseline 
 baseline_dur=200;
 baseline=avgbinresponse(baseline_dur,binsize,cdn_sig(:,frame_shock(1)-baseline_dur:frame_shock(1)-1));
@@ -290,52 +357,219 @@ compare_session_FR(SR_id_increase,sig2,session_start,session_end,protocol)
 % Shock decreased cells 
 compare_session_FR(SR_id_decrease,sig2,session_start,session_end,protocol)
 
-%%
-function compare_session_FR(ids,sig2,session_start,session_end,protocol)
-    FRpreA=calcFR(sig2(ids,session_start(strcmp(protocol,'preA')):session_end(strcmp(protocol,'preA'))));
-    FRpostA=calcFR(sig2(ids,session_start(strcmp(protocol,'postA')):session_end(strcmp(protocol,'postA'))));
-    FRpreB=calcFR(sig2(ids,session_start(strcmp(protocol,'preB')):session_end(strcmp(protocol,'preB'))));
-    FRpostB=calcFR(sig2(ids,session_start(strcmp(protocol,'postB')):session_end(strcmp(protocol,'postB'))));
-    Y=[FRpreB FRpreA FRpostA FRpostB];
-    g={'preB','preA','postA','postB'};
-    %%% 1-way ANOVA
-     
-    % [~,~,stats]=anova1(Y,g);
-    % [c,~,~,gnames] = multcompare(stats);
 
-    % paired T-test
-    [~,p1]=ttest(FRpreA,FRpostA);
-    [~,p2]=ttest(FRpreB,FRpostB);
-    [~,p3]=ttest(FRpreA,FRpreB);
-    [~,p4]=ttest(FRpostA,FRpostB);
 
-    % [p1,h1]=ranksum(FRpreA,FRpostA);
-    % [p2,h2]=ranksum(FRpreB,FRpostB);
-    % [p3,h3]=ranksum(FRpreA,FRpreB);
-    % [p4,h4]=ranksum(FRpostA,FRpostB);
-    group_pair={[2,3],[1,4],[2,1],[3,4]};
-    p_pair=[p1 p2 p3 p4];
 
-    figure
-    boxplot(Y,'Notch','on','Labels',g);
-    hold on;
-    sigstar(group_pair((p_pair<=0.05)),p_pair(p_pair<=0.05));
-    ax=gca;
-    ax.YLim=[0 0.6];
+
+%% Define pre-conditioning context cells using shuffling
+sig2=ms.sigraw';
+calcmethod=@calcAUC;
+ids=1:size(sig2,1);
+
+ctx_dur=3000-60;
+shocksession_dur=3500;
+sigpreA=sig2(ids,session_start(strcmp(protocol,'preA')):session_start(strcmp(protocol,'preA'))+ctx_dur-1);
+sigpostA=sig2(ids,session_start(strcmp(protocol,'postA')):session_start(strcmp(protocol,'postA'))+ctx_dur-1);
+sigshock=sig2(ids,session_start(strcmp(protocol,'conditioning')):session_start(strcmp(protocol,'conditioning'))+shocksession_dur-1);
+sigpreB=sig2(ids,session_start(strcmp(protocol,'preB')):session_start(strcmp(protocol,'preB'))+ctx_dur-1);
+sigpostB=sig2(ids,session_start(strcmp(protocol,'postB')):session_start(strcmp(protocol,'postB'))+ctx_dur-1);
+FRpreA=calcmethod(sigpreA);
+FRpostA=calcmethod(sigpostA);
+FRpreB=calcmethod(sigpreB);
+FRpostB=calcmethod(sigpostB);
+ctxpref_pre=(FRpreA-FRpreB)./(FRpreA+FRpreB);
+ctxpref_post=(FRpostA-FRpostB)./(FRpostA+FRpostB);
+
+calcmethod=@calcTF;
+sigpre=[sigpreB sigpreA];
+sigpost=[sigpostA sigpostB];
+%% shuffling process 
+n_shuffle=100;
+ctxprefpre_shuffle=zeros(size(sigpre,1),n_shuffle);
+for x=1:n_shuffle
+    randshift=randi(500,1);
+    sigshift=circshift(sigpre,randshift,2);
+    randsplit=randperm(splitsize);
+    sigsplit=reshape(sigshift,size(sigshift,1),[],splitsize);
+    sigshuffle=reshape(sigsplit(:,:,randsplit),size(sigshift,1),[]);
+    frb=calcmethod(sigshuffle(:,1:ctx_dur));
+    fra=calcmethod(sigshuffle(:,ctx_dur+1:end));
+    ctxprefpre_shuffle(:,x)=(fra-frb)./(fra+frb);
 end
-
-
-
-function FR=calcFR(sigtt)
-    sigtt(sigtt>0)=1;
-    FR=sum(sigtt,2)/size(sigtt,2);
-end
-
-function binresponse=avgbinresponse(dur,binsize,response)
-    bins=discretize(1:dur,0:binsize:dur);
-    bincount=dur/binsize;
-    binresponse=zeros(size(response,1),bincount);
-    for i = 1:bincount
-        binresponse(:,i)=mean(response(:,bins==i),2);
+%% 
+ctxsigpref=zeros(size(ctxprefpre_shuffle,1),1);
+ts = [-2.56 2.56];      % T-Score
+for n=1:size(ctxprefpre_shuffle,1)
+    ctxpreftemp=ctxprefpre_shuffle(n,:);
+    SEM = std(ctxpreftemp); %/sqrt(length(ctxpreftemp));               % Standard Error
+    
+    CI = mean(ctxpreftemp) + ts*SEM;
+    if ctxpref_pre(n)>=CI(2)
+        ctxsigpref(n)=1;
+    elseif ctxpref_pre(n)<=CI(1)
+        ctxsigpref(n)=-1;
+    else
+        ctxsigpref(n)=0;
     end
 end
+ctxA_ind=find(ctxsigpref==1);
+ctxB_ind=find(ctxsigpref==-1);
+figure;
+hold on;
+plot_pair(ctxpref_pre,ctxpref_post,ctxA_ind,'r');
+plot_pair(ctxpref_pre,ctxpref_post,ctxB_ind,'b');
+[~,p1]=ttest(ctxpref_pre(ctxA_ind),ctxpref_post(ctxA_ind));
+[~,p2]=ttest(ctxpref_pre(ctxB_ind),ctxpref_post(ctxB_ind));
+xlim([0 3]);
+ax=gca;
+ax.XTick=[1,2];
+ax.XTickLabel={'Pre','Post'};
+title('Context preference calculated by Firing Rate');
+%%
+figure;
+subplot(121)
+imagesc(zscore([sigpre(ctxA_ind,:); sigpre(ctxB_ind,:)],[],2),[1.65,6]);
+subplot(122)
+imagesc(zscore([sigpost(ctxA_ind,:); sigpost(ctxB_ind,:)],[],2),[1.65,6]);
+
+%% FR 
+sig2=ms.sigdeconvolved';
+ids=SR_id_increase;
+%ids=1:size(sig2,1);
+FRpreA=calcFR(sig2(ids,session_start(strcmp(protocol,'preA')):session_end(strcmp(protocol,'preA'))));
+FRpostA=calcFR(sig2(ids,session_start(strcmp(protocol,'postA')):session_end(strcmp(protocol,'postA'))));
+FRpreB=calcFR(sig2(ids,session_start(strcmp(protocol,'preB')):session_end(strcmp(protocol,'preB'))));
+FRpostB=calcFR(sig2(ids,session_start(strcmp(protocol,'postB')):session_end(strcmp(protocol,'postB'))));
+Y=[FRpreB FRpreA FRpostA FRpostB];
+ctxpref_pre=(FRpreA-FRpreB)./(FRpreA+FRpreB);
+ctxpref_post=(FRpostA-FRpostB)./(FRpostA+FRpostB);
+
+ctxA_ind=find(ctxpref_pre>=0.1);
+ctxB_ind=find(ctxpref_pre<=-0.1);
+
+figure;
+hold on;
+plot_pair(ctxpref_pre,ctxpref_post,ctxA_ind,'r');
+plot_pair(ctxpref_pre,ctxpref_post,ctxB_ind,'b');
+[~,p1]=ttest(ctxpref_pre(ctxA_ind),ctxpref_post(ctxA_ind));
+[~,p2]=ttest(ctxpref_pre(ctxB_ind),ctxpref_post(ctxB_ind));
+xlim([0 3]);
+ax=gca;
+ax.XTick=[1,2];
+ax.XTickLabel={'Pre','Post'};
+title('Context preference calculated by Firing Rate');
+
+%% AUC
+sig2=ms.sigraw';
+ids=SR_id_increase;
+%ids=1:size(sig2,1);
+ctx_dur=2900;
+shocksession_dur=3500;
+sigpreA=sig2(ids,session_start(strcmp(protocol,'preA')):session_start(strcmp(protocol,'preA'))+ctx_dur-1);
+sigpostA=sig2(ids,session_start(strcmp(protocol,'postA')):session_start(strcmp(protocol,'postA'))+ctx_dur-1);
+sigshock=sig2(ids,session_start(strcmp(protocol,'conditioning')):session_start(strcmp(protocol,'conditioning'))+shocksession_dur-1);
+sigpreB=sig2(ids,session_start(strcmp(protocol,'preB')):session_start(strcmp(protocol,'preB'))+ctx_dur-1);
+sigpostB=sig2(ids,session_start(strcmp(protocol,'postB')):session_start(strcmp(protocol,'postB'))+ctx_dur-1);
+FRpreA=calcAUC(sig2(ids,session_start(strcmp(protocol,'preA')):session_start(strcmp(protocol,'preA'))+ctx_dur-1));
+FRpostA=calcAUC(sig2(ids,session_start(strcmp(protocol,'postA')):session_start(strcmp(protocol,'postA'))+ctx_dur-1));
+FRpreB=calcAUC(sig2(ids,session_start(strcmp(protocol,'preB')):session_start(strcmp(protocol,'preB'))+ctx_dur-1));
+FRpostB=calcAUC(sig2(ids,session_start(strcmp(protocol,'postB')):session_start(strcmp(protocol,'postB'))+ctx_dur-1));
+
+ctxpref_pre=(FRpreA-FRpreB)./(FRpreA+FRpreB);
+ctxpref_post=(FRpostA-FRpostB)./(FRpostA+FRpostB);
+ctxA_ind=find(ctxpref_pre>=0.1);
+ctxB_ind=find(ctxpref_pre<=-0.1);
+
+figure;
+hold on;
+plot_pair(ctxpref_pre,ctxpref_post,ctxA_ind,'r');
+plot_pair(ctxpref_pre,ctxpref_post,ctxB_ind,'b');
+[~,p1]=ttest(ctxpref_pre(ctxA_ind),ctxpref_post(ctxA_ind));
+[~,p2]=ttest(ctxpref_pre(ctxB_ind),ctxpref_post(ctxB_ind));
+xlim([0 3]);
+ax=gca;
+ax.XTick=[1,2];
+ax.XTickLabel={'Pre','Post'};
+title('Context preference calculated by AUC');
+%% Significant transient frequency 
+sig2=ms.sigraw';
+ids=SR_id_increase;
+%ids=1:size(sig2,1);
+ctx_dur=2900;
+shocksession_dur=3500;
+sigpreA=sig2(ids,session_start(strcmp(protocol,'preA')):session_start(strcmp(protocol,'preA'))+ctx_dur-1);
+sigpostA=sig2(ids,session_start(strcmp(protocol,'postA')):session_start(strcmp(protocol,'postA'))+ctx_dur-1);
+sigshock=sig2(ids,session_start(strcmp(protocol,'conditioning')):session_start(strcmp(protocol,'conditioning'))+shocksession_dur-1);
+sigpreB=sig2(ids,session_start(strcmp(protocol,'preB')):session_start(strcmp(protocol,'preB'))+ctx_dur-1);
+sigpostB=sig2(ids,session_start(strcmp(protocol,'postB')):session_start(strcmp(protocol,'postB'))+ctx_dur-1);
+FRpreA=calcTF(sigpreA);
+FRpostA=calcTF(sigpostA);
+FRpreB=calcTF(sigpreB);
+FRpostB=calcTF(sigpostB);
+
+ctxpref_pre=(FRpreA-FRpreB)./(FRpreA+FRpreB);
+ctxpref_post=(FRpostA-FRpostB)./(FRpostA+FRpostB);
+ctxA_ind=find(ctxpref_pre>=0.1);
+ctxB_ind=find(ctxpref_pre<=-0.1);
+
+figure;
+hold on;
+plot_pair(ctxpref_pre,ctxpref_post,ctxA_ind,'r');
+plot_pair(ctxpref_pre,ctxpref_post,ctxB_ind,'b');
+[~,p1]=ttest(ctxpref_pre(ctxA_ind),ctxpref_post(ctxA_ind));
+[~,p2]=ttest(ctxpref_pre(ctxB_ind),ctxpref_post(ctxB_ind));
+xlim([0 3]);
+ax=gca;
+ax.XTick=[1,2];
+ax.XTickLabel={'Pre','Post'};
+title('Context preference calculated by Significant Transient Frequency');
+
+%% Visualize 
+[diffval,diffind]=sort(ctxpref_post-ctxpref_pre);
+sigtemp=[sigpreA, sigpreB, sigshock, sigpostA, sigpostB];
+figure;
+subplot(121)
+hold on;
+imagesc(zscore(sigtemp(diffind,:),[],2),[1.65,3]);
+session_start2=[1;ctx_dur+1;ctx_dur*2+1;ctx_dur*2+shocksession_dur+1;ctx_dur*3+shocksession_dur+1;ctx_dur*4+shocksession_dur+1];
+axis tight;
+ax=gca;
+for i=1:length(session_start2)
+    plot([session_start2(i) session_start2(i)],ax.YLim,'--k');
+end
+for s=1:numel(frame_shock)
+    area([session_start2(3)+frame_shock(s); session_start2(3)+frame_shock(s)+shock_dur],[ylim; ylim],'FaceAlpha',0.4,'FaceColor','r','LineStyle','none')
+end
+
+subplot(122)
+scatter(ctxpref_pre(ctxA_ind),ctxpref_post(ctxA_ind),'r');
+hold on;
+scatter(ctxpref_pre(ctxB_ind),ctxpref_post(ctxB_ind),'b');
+xlim([-1,1]);
+ylim([-1,1]);
+plot([0 0],[-1 1],'--k')
+plot([-1 1],[0 0],'--k')
+axis square
+xlabel('Pre-conditioning');
+ylabel('Post-conditioning');
+
+
+
+%%
+function plot_pair(ctxpref_pre,ctxpref_post,id,color)
+    for n=1:length(id)
+        plot([1,2],[ctxpref_pre(id(n)),ctxpref_post(id(n))],'color',color);
+    end
+    scatter(ones(length(id),1),ctxpref_pre(id),'filled',color);
+    
+    scatter(2*ones(length(id),1),ctxpref_post(id),'filled',color);
+
+end
+
+
+
+
+
+
+
+

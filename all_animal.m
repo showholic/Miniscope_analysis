@@ -57,8 +57,6 @@ title('Mean Response');
 %%
 figure;
 imagesc(shockdayresponse(indsort,:),[0,3]);
-%%
-
 
 
 %% compare pre and post context preference 
@@ -96,7 +94,7 @@ sigall=[];
 for n=1:numel(filenames)
     animaldata=animal{n};
     sig2=animaldata.ms.sigdeconvolved';
-    ids=find_SRcells(animaldata); %all SR cells 
+    ids=find_SRcells(animaldata,pre_dur,post_dur); %all SR cells 
     %ids=1:size(sig2,1); %all cells
     session_start=animaldata.session_start;
     session_end=animaldata.session_end;
@@ -168,38 +166,89 @@ hold on;
 cdfplot(ctxp2);
 legend('Pre-conditioning','Post-conditioning');
 [h,p] = kstest2(ctxp1,ctxp2,'Tail','larger');
+%% Identify pre-conditioning context cells through bootstrap 
+ctx_dur=3000-120;
+shocksession_dur=3500;
+n_shuffle=100;
+calcmethod=@calcAUC;
+splitsize=6;
+ctxpref_pre=cell(numel(filenames),1);
+ctxpref_post=cell(numel(filenames),1);
+sigpre=cell(numel(filenames),1);
+sigpost=cell(numel(filenames),1);
+ctxA_ind=cell(numel(filenames),1);
+ctxB_ind=cell(numel(filenames),1);
+
+for y=1:numel(filenames)
+    sig2=animal{y}.ms.sigraw';   
+    ts = tinv([0.01  0.99],size(sig2,1)-1);
+    session_start=animal{y}.session_start;
+    protocol=animal{y}.protocol;
+    ids=1:size(sig2,1);
+    sigpreA=sig2(ids,session_start(strcmp(protocol,'preA')):session_start(strcmp(protocol,'preA'))+ctx_dur-1);
+    sigpostA=sig2(ids,session_start(strcmp(protocol,'postA')):session_start(strcmp(protocol,'postA'))+ctx_dur-1);
+    %sigshock=sig2(ids,session_start(strcmp(protocol,'conditioning')):session_start(strcmp(protocol,'conditioning'))+shocksession_dur-1);
+    sigpreB=sig2(ids,session_start(strcmp(protocol,'preB')):session_start(strcmp(protocol,'preB'))+ctx_dur-1);
+    sigpostB=sig2(ids,session_start(strcmp(protocol,'postB')):session_start(strcmp(protocol,'postB'))+ctx_dur-1);
+    FRpreA=calcmethod(sigpreA);
+    FRpostA=calcmethod(sigpostA);
+    FRpreB=calcmethod(sigpreB);
+    FRpostB=calcmethod(sigpostB);
+    ctxpref_pre{y}=(FRpreA-FRpreB)./(FRpreA+FRpreB);
+    ctxpref_post{y}=(FRpostA-FRpostB)./(FRpostA+FRpostB);
+    sigpre{y}=[sigpreB sigpreA];
+    sigpost{y}=[sigpostA sigpostB];    
+    ctxprefpre_shuffle=zeros(size(sig2,1),n_shuffle);
+    for x=1:n_shuffle
+        randshift=randi(500,1);
+        sigshift=circshift(sigpre{y},randshift,2); %shuffle pre-conditioning transients 
+        randsplit=randperm(splitsize);
+        sigsplit=reshape(sigshift,size(sigshift,1),[],splitsize);
+        sigshuffle=reshape(sigsplit(:,:,randsplit),size(sigshift,1),[]);
+        frb=calcmethod(sigshuffle(:,1:ctx_dur));
+        fra=calcmethod(sigshuffle(:,ctx_dur+1:end));
+        ctxprefpre_shuffle(:,x)=(fra-frb)./(fra+frb);
+    end
+    ctxsigpref=zeros(size(ctxprefpre_shuffle,1),1);
+    
+    for n=1:size(ctxprefpre_shuffle,1)
+        ctxpreftemp=ctxprefpre_shuffle(n,:);
+        SEM = std(ctxpreftemp)/sqrt(length(ctxpreftemp));               % Standard Error
+        
+        CI = mean(ctxpreftemp) + ts*SEM;
+        if ctxpref_pre{y}(n)>=CI(2)
+            ctxsigpref(n)=1;
+        elseif ctxpref_pre{y}(n)<=CI(1)
+            ctxsigpref(n)=-1;
+        else
+            ctxsigpref(n)=0;
+        end
+    end
+    ctxA_ind{y}=find(ctxsigpref==1);
+    ctxB_ind{y}=find(ctxsigpref==-1);
+end
+%%
+figure;
+for n=1:numel(filenames)
+    subplot(6,2,(n-1)*2+1)
+    imagesc(zscore(sigpre{n}(ctxA_ind{n},:),[],2),[1.65 6]);
+    subplot(6,2,(n-1)*2+2)
+    imagesc(zscore(sigpost{n}(ctxA_ind{n},:),[],2),[1.65 6]);
+end
+
+figure;
+for n=1:numel(filenames)
+    subplot(6,2,(n-1)*2+1)
+    imagesc(zscore(sigpre{n}(ctxB_ind{n},:),[],2),[1.65 6]);
+    subplot(6,2,(n-1)*2+2)
+    imagesc(zscore(sigpost{n}(ctxB_ind{n},:),[],2),[1.65 6]);
+end
+
 %%
 
-function FR=calcFR(sigtt)
-    sigtt(sigtt>0)=1;
-    FR=sum(sigtt,2)/size(sigtt,2);
-end
 
-function newdata=get_basics(animaldata)
-    newdata=animaldata;
-    newdata.sig=animaldata.ms.sigraw';
-    shockts=animaldata.shockts;
-    ms_start=animaldata.ms_start;
-    shock_start=animaldata.shock_start;
-    ms_ts=animaldata.ms.ms_ts;
-    session_dur=cellfun(@length,ms_ts);
-    session_start=1;
-    for i=1:length(session_dur)-1
-        starttemp=session_start(i)+session_dur(i);
-        session_start=[session_start; starttemp];
-    end
-    session_end=session_start+session_dur'-1;
-    
-    % Get shock time
-    shock_ts2=shockts.time-shockts.time(ms_start(4));
-    shock_bvt=shock_ts2(shock_start);
-    shock_mst=ms_ts{4}/1000;
-    temp1=abs(double(repmat(shock_mst,length(shock_bvt))')-shock_bvt');
-    [minval,frame_shock]=min(temp1,[],1);
-    newdata.session_start=session_start;
-    newdata.session_end=session_end;
-    newdata.frame_shock=frame_shock;
-end
+
+
 function [shock_id,meanresponse_shock,shock_response]=find_SRcells(animaldata,pre_dur,post_dur)
     sig=animaldata.ms.sigraw';
     shockts=animaldata.shockts;
@@ -270,11 +319,3 @@ function [shock_id,meanresponse_shock,shock_response]=find_SRcells(animaldata,pr
     
 end
 
-function binresponse=avgbinresponse(dur,binsize,response)
-    bins=discretize(1:dur,0:binsize:dur);
-    bincount=dur/binsize;
-    binresponse=zeros(size(response,1),bincount);
-    for i = 1:bincount
-        binresponse(:,i)=mean(response(:,bins==i),2);
-    end
-end
