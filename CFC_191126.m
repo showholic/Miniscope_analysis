@@ -45,7 +45,95 @@ temp1=abs(double(repmat(shock_mst,length(shock_bvt2))')-shock_bvt2');
 for s=1:numel(frame_shock)
     area([session_start(4)+frame_shock(s); session_start(4)+frame_shock(s)+shock_dur],[ylim; ylim],'FaceAlpha',1,'FaceColor','r','LineStyle','none')
 end
-    
+%% Behavior analysis
+load(fullfile(filepath,'arena.mat'));
+body_part='Body';
+behavpos_file=dir(fullfile(filepath,'behave_video*.csv'));
+behavpos_filename=cell(length(behavpos_file),1);
+
+behavdatatable=cell(length(behavpos_file),1);
+for n=1:length(behavpos_file)
+    behavpos_filename{n}=fullfile(filepath,behavpos_file(n).name);
+    behavdatatable{n}=readtable(behavpos_filename{n},'ReadRowNames',true);    
+end
+
+datatemp=behavdatatable{1};
+temp=datatemp{1,:};
+tempind=zeros(length(temp),1);
+for i=1:length(temp)
+    tempind(i)=strcmp(temp{i},body_part);
+end
+behavdata=cell(length(behavpos_file),1);
+body_ind=find(tempind==1);
+
+figure;
+for n=1:length(behavpos_file)
+    datatemp=behavdatatable{n};
+    behavdata{n}.c=str2double(datatemp{3:end,body_ind(3)});
+    behavdata{n}.x=str2double(datatemp{3:end,body_ind(1)});
+    behavdata{n}.y=str2double(datatemp{3:end,body_ind(2)});
+    for i=1:length(behavdata{n}.x)
+        if bw{n}(ceil(abs(behavdata{n}.y(i))),ceil(abs(behavdata{n}.x(i))))==0
+            try
+                behavdata{n}.x(i)=behavdata{n}.x(i-1);
+                behavdata{n}.y(i)=behavdata{n}.y(i-1);
+            catch
+                behavdata{n}.x(i)=behavdata{n}.x(i+1);
+                behavdata{n}.y(i)=behavdata{n}.y(i+1);
+            end
+        end
+    end
+    subplot(1,length(behavpos_file),n)
+    plot(behavdata{n}.x,behavdata{n}.y);
+    axis equal;
+    axis tight;
+end
+
+%%
+figure;
+behav=cell(length(behavpos_file),1);
+for ns=1:length(behavpos_file)
+    behavts=(0:1/30:(length(behavdata{ns}.x)-1)*(1/30))';
+    try
+        behavts=behavts-behavts(ms_start(ns));
+    catch
+        
+    end
+    mst=double(ms_ts{ns})'/1000;
+    temp1=repmat(behavts,1,length(mst))';
+    temp2=abs(temp1-mst);
+    [minval,frame_behav]=min(temp2,[],2);
+    ctemp=behavdata{ns}.c(frame_behav);
+    ttemp=behavts(frame_behav);
+    xtemp=behavdata{ns}.x(frame_behav);
+    ytemp=behavdata{ns}.y(frame_behav);
+    stemp=[0;sqrt(diff(ytemp).^2+diff(xtemp).^2)./diff(ttemp)];
+    windowSize = 5; 
+    b = (1/windowSize)*ones(1,windowSize);
+    a = 1;
+    sfilt = filter(b,a,stemp);
+    behav{ns}.x=xtemp;
+    behav{ns}.y=ytemp;
+    behav{ns}.t=ttemp;
+    behav{ns}.s=stemp;
+    behav{ns}.sf=sfilt;
+    subplot(length(behavpos_file),1,ns);
+    sigtemp=sig(:,session_start(ns):session_end(ns));
+    imagesc(zscore(sigtemp,[],2),[0 6]);
+    hold on;
+    yyaxis right;
+    lh=plot(sfilt);
+    lh.Color=[0,1,0,0.3];
+    if ns==4
+        for s=1:numel(frame_shock)
+            area([frame_shock(s); frame_shock(s)+shock_dur],[ylim; ylim],'FaceAlpha',0.4,'FaceColor','r','LineStyle','none')
+        end
+    end
+end
+
+
+save('E:\Miniscope_Chenhaoshan\all_animal\processed_191126.mat','shockts','ms_start', ...
+    'shock_start','protocol','ms','session_start','session_end','frame_shock','behav');       
 %% Conditioning day
 pre_dur=100; %100 frames= 10s 
 post_dur=100;

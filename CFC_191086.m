@@ -45,7 +45,104 @@ temp1=abs(double(repmat(shock_mst,length(shock_bvt2))')-shock_bvt2');
 for s=1:numel(frame_shock)
     area([session_start(4)+frame_shock(s); session_start(4)+frame_shock(s)+shock_dur],[ylim; ylim],'FaceAlpha',1,'FaceColor','r','LineStyle','none')
 end
-    
+%% Behavior analysis
+load(fullfile(filepath,'arena.mat'));
+body_part='Body';
+behavpos_file=dir(fullfile(filepath,'behave_video*.csv'));
+behavpos_filename=cell(length(behavpos_file),1);
+
+behavdatatable=cell(length(behavpos_file),1);
+for n=1:length(behavpos_file)
+    behavpos_filename{n}=fullfile(filepath,behavpos_file(n).name);
+    behavdatatable{n}=readtable(behavpos_filename{n},'ReadRowNames',true);    
+end
+
+datatemp=behavdatatable{1};
+temp=datatemp{1,:};
+tempind=zeros(length(temp),1);
+for i=1:length(temp)
+    tempind(i)=strcmp(temp{i},body_part);
+end
+behavdata=cell(length(behavpos_file),1);
+body_ind=find(tempind==1);
+
+figure;
+for n=1:length(behavpos_file)
+    datatemp=behavdatatable{n};
+    behavdata{n}.c=str2double(datatemp{3:end,body_ind(3)});
+    behavdata{n}.x=str2double(datatemp{3:end,body_ind(1)});
+    behavdata{n}.y=str2double(datatemp{3:end,body_ind(2)});
+    for i=1:length(behavdata{n}.x)
+        if bw{n}(ceil(abs(behavdata{n}.y(i))),ceil(abs(behavdata{n}.x(i))))==0
+            try
+                behavdata{n}.x(i)=behavdata{n}.x(i-1);
+                behavdata{n}.y(i)=behavdata{n}.y(i-1);
+            catch
+                behavdata{n}.x(i)=behavdata{n}.x(i+1);
+                behavdata{n}.y(i)=behavdata{n}.y(i+1);
+            end
+        end
+    end
+    subplot(1,length(behavpos_file),n)
+    plot(behavdata{n}.x,behavdata{n}.y);
+    axis equal;
+    axis tight;
+end
+
+%%
+figure;
+behav=cell(length(behavpos_file),1);
+for ns=1:length(behavpos_file)
+    behavts=(0:1/30:(length(behavdata{ns}.x)-1)*(1/30))';
+    behavts=behavts-behavts(ms_start(ns));
+    mst=double(ms_ts{ns})'/1000;
+    temp1=repmat(behavts,1,length(mst))';
+    temp2=(temp1-mst);
+    temp2(temp2<=0)=inf;
+    [minval,frame_behav]=min(temp2,[],2);
+    frame_behav=frame_behav-1;
+    ctemp=behavdata{ns}.c(frame_behav);
+    ttemp=behavts(frame_behav);
+    xtemp=behavdata{ns}.x(frame_behav);
+    ytemp=behavdata{ns}.y(frame_behav);
+    stemp=[0;sqrt(diff(ytemp).^2+diff(xtemp).^2)./diff(ttemp)];
+    windowSize = 5; 
+    b = (1/windowSize)*ones(1,windowSize);
+    a = 1;
+    sfilt = filter(b,a,stemp);
+    behav{ns}.x=xtemp;
+    behav{ns}.y=ytemp;
+    behav{ns}.t=ttemp;
+    behav{ns}.s=stemp;
+    behav{ns}.sf=sfilt;
+    subplot(length(behavpos_file),1,ns);
+    sigtemp=sig(:,session_start(ns):session_end(ns));
+    imagesc(zscore(sigtemp,[],2),[0 6]);
+    hold on;
+    yyaxis right;
+    lh=plot(sfilt);
+    lh.Color=[0,1,0,0.3];
+    if ns==4
+        for s=1:numel(frame_shock)
+            area([frame_shock(s); frame_shock(s)+shock_dur],[ylim; ylim],'FaceAlpha',0.4,'FaceColor','r','LineStyle','none')
+        end
+    end
+end
+
+
+%save('E:\Miniscope_Chenhaoshan\all_animal\processed_191086.mat','shockts','ms_start', ...
+%    'shock_start','protocol','ms','session_start','session_end','frame_shock','behav');   
+%% Recalculate frame shock 
+for s=1:3
+    behavts=(0:1/30:(length(behavdata{4}.x)-1)*(1/30))';
+    behavts=behavts-behavts(ms_start(4));
+    shockstarttemp=behavts(shock_start(s));
+    ttemp=behav{4}.t-shockstarttemp;
+    ttemp(ttemp<0)=inf;
+    [minval,frame_shock(s)]=min(ttemp);
+end
+behav{4}.t(frame_shock)
+ms_ts{4}(frame_shock)
 %% Conditioning day
 pre_dur=100; %100 frames= 10s 
 post_dur=100;
@@ -184,8 +281,7 @@ hold on;
 area([0; 2],[ax.YLim; ax.YLim],'FaceAlpha',0.2,'FaceColor','r','LineStyle','none')
 title('Mean Response');
 saveas(f,fullfile(filepath,'shock_response.png'))
-save('E:\Miniscope_Chenhaoshan\all_animal\processed_191086.mat','shockts','ms_start', ...
-    'shock_start','protocol','ms','shock_response','shock_responsemean');
+
 
 %% Define shock responsive cells using shuffling 
 cdn_sig = sig(:,session_start(4):session_start(4)+3599);
@@ -215,12 +311,13 @@ end
 shocksigre=zeros(size(cdn_sig,1),numel(frame_shock));
 %ts = tinv([0.01  0.99],length(AUCshuffle)-1);      % T-Score
 ts=[-1.65 1.65];
+id_ishock=cell(numel(frame_shock),1);
 for n=1:size(cdn_sig,1)
     for s=1:numel(frame_shock)
         AUCshuffle=AUC_shock_shuffle(:,n,s);
         AUC=AUC_shock(n,s);
         SEM = std(AUCshuffle);%/sqrt(length(AUCshuffle));               % Standard Error
-       
+        
         CI = mean(AUCshuffle) + ts*SEM;    
         if AUC>=CI(2)
             shocksigre(n,s)=1;
@@ -239,6 +336,7 @@ responsetemp=shock_responsemean(idtemp,pre_dur+1:end);
 SR_shuffle_id=idtemp(indsort);
 for s=1:numel(frame_shock)
     ax=subplot(1,4,s);
+    id_ishock{s}=find(shocksigre(:,s)==1);
     imagesc('XData',t,'CData',shock_response(SR_shuffle_id,:,s),[0 zscorethreshold]);
     axis tight;
     ax.YLim=[0.5 length(SR_shuffle_id)+0.5];    
@@ -275,7 +373,7 @@ for s=1:numel(frame_shock)
     area([0; 2],[ax.YLim; ax.YLim],'FaceAlpha',0.2,'FaceColor','r','LineStyle','none');
     title(['Shock #' num2str(s)]);
 end
-
+%% ROIs of shock cells
 figure;
 
 Boundary={};
@@ -299,6 +397,10 @@ end
 
 %% Video 
 v=load(fullfile(filepath,'motioncorrected.mat'));
+vshockfile=dir(fullfile(filepath,'behave_video4*.MP4'));
+vshock=VideoReader(fullfile(filepath,vshockfile.name));
+
+    
 %%
 % frameno=session_start(4)+frame_shock(1);
 % v.CurrentTime=frameno*(1/v.FrameRate);
@@ -313,20 +415,37 @@ for s=1:3
         im(:,:,i,s)=squeeze(v.vid(frameno,:,:));
     end
 end
-
+%%
+for s=1:3
+    
+    for i=1:vid_dur
+        vshock.CurrentTime=behav{4}.t(frame_shock(s)-pre_dur+i-1)-1/30;
+        imbehav(:,:,i,s)=rgb2gray(readFrame(vshock));
+    end
+end
+vid_shockbehav=[imbehav(:,:,:,1),imbehav(:,:,:,2),imbehav(:,:,:,3)];
+%%
 vid_shock=[im(:,:,:,1),im(:,:,:,2),im(:,:,:,3)];
 v_out=VideoWriter(fullfile(filepath,'Shock_video.avi'),'Uncompressed AVI');
 v_out.FrameRate=10;
 open(v_out);
 figure;
+ax1=subplot(211);
 img=imshow(vid_shock(:,:,1),[0 250]);
 axis equal;
 axis tight;
+ax2=subplot(212);
+img2=imshow(vid_shockbehav(:,:,1));
+axis equal;
+axis tight;
+ax1.Position=[0.1 0.45 0.8 0.4];
+ax2.Position=[0.1 0.15 0.8 0.4];
 for i=1:vid_dur
     img.CData=vid_shock(:,:,i);
+    img2.CData=vid_shockbehav(:,:,i);
     if i==pre_dur+1
-        hold on;
-        sh=scatter(ms.width*1.5,230,10,'filled','MarkerFaceColor','r');
+        hold(ax1,'on');
+        sh=scatter(ax1,ms.width*1.5,230,10,'filled','MarkerFaceColor','r');
 %         for s=1:3
 %             for n=1:numel(id_ishock{s})
 %                 plot(Boundary{n,s}(:,2)+(s-1)*double(ms.width),Boundary{n,s}(:,1));
@@ -335,7 +454,7 @@ for i=1:vid_dur
     elseif i==pre_dur+shock_dur+1
         delete(sh);
     end
-    writeVideo(v_out,getframe(gca));
+    writeVideo(v_out,getframe(gcf));
 end
 close(v_out);
 %%

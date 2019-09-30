@@ -1,13 +1,18 @@
 clear;
+addpath('.\Utils');
 filepath='E:\Miniscope_Chenhaoshan\all_animal';
 filenames=dir('E:\Miniscope_Chenhaoshan\all_animal\*.mat');
 animal=cell(numel(filenames),1);
 for n=1:numel(filenames)
     animal{n}=load(fullfile(filepath,filenames(n).name));
 end
-%% Complete the data
+%%
+accuracyA=zeros(numel(filenames),1);
+accuracyB=zeros(numel(filenames),1);
 for n=1:numel(filenames)
-    animal{n}=get_basics(animal{n});
+    sig=animal{n}.ms.sigraw';
+    
+    [accuracyA(n),accuracyB(n)]=predict_ctx(sig,animal{n}.session_start,animal{n}.protocol,animal{n}.ms.ms_ts);
 end
 %% Combine all shock response 
 shock_responsemean=[];
@@ -166,7 +171,7 @@ hold on;
 cdfplot(ctxp2);
 legend('Pre-conditioning','Post-conditioning');
 [h,p] = kstest2(ctxp1,ctxp2,'Tail','larger');
-%% Identify pre-conditioning context cells through bootstrap 
+%% Identify pre-conditioning context cells through bootstrap (SLOW !!!!!)
 ctx_dur=3000-120;
 shocksession_dur=3500;
 n_shuffle=100;
@@ -229,13 +234,59 @@ for y=1:numel(filenames)
 end
 %%
 figure;
-for n=1:numel(filenames)
-    subplot(6,2,(n-1)*2+1)
+hold on;
+ctxprefpreA_all=[];
+ctxprefpostA_all=[];
+ctxprefpreB_all=[];
+ctxprefpostB_all=[];
+for n=1:6
+    plot_pair(ctxpref_pre{n},ctxpref_post{n},ctxA_ind{n},'r')
+    plot_pair(ctxpref_pre{n},ctxpref_post{n},ctxB_ind{n},'b')
+    ctxprefpreA_all=[ctxprefpreA_all; ctxpref_pre{n}(ctxA_ind{n})];
+    ctxprefpostA_all=[ctxprefpostA_all; ctxpref_post{n}(ctxA_ind{n})];
+    ctxprefpreB_all=[ctxprefpreB_all; ctxpref_pre{n}(ctxB_ind{n})];
+    ctxprefpostB_all=[ctxprefpostB_all; ctxpref_post{n}(ctxB_ind{n})];
+end
+[~,p1]=ttest(ctxprefpreA_all,ctxprefpostA_all,'tail','right');
+[~,p2]=ttest(ctxprefpreB_all,ctxprefpostB_all,'tail','left');
+%% 
+figure;
+hold on;
+ctxprefpreA_all=[];
+ctxprefpostA_all=[];
+ctxprefpreB_all=[];
+ctxprefpostB_all=[];
+for n=[3,5,6]
+    plot_pair(ctxpref_pre{n},ctxpref_post{n},ctxA_ind{n},'r')
+    plot_pair(ctxpref_pre{n},ctxpref_post{n},ctxB_ind{n},'b')
+    ctxprefpreA_all=[ctxprefpreA_all; ctxpref_pre{n}(ctxA_ind{n})];
+    ctxprefpostA_all=[ctxprefpostA_all; ctxpref_post{n}(ctxA_ind{n})];
+    ctxprefpreB_all=[ctxprefpreB_all; ctxpref_pre{n}(ctxB_ind{n})];
+    ctxprefpostB_all=[ctxprefpostB_all; ctxpref_post{n}(ctxB_ind{n})];
+end
+[~,p1]=ttest(ctxprefpreA_all,ctxprefpostA_all,'tail','right');
+[~,p2]=ttest(ctxprefpreB_all,ctxprefpostB_all,'tail','left');
+%% Context A cells, 2 different post-conditioning sequences 
+figure;
+i=1;
+for n=[1,2,4]
+    subplot(3,2,(i-1)*2+1)
     imagesc(zscore(sigpre{n}(ctxA_ind{n},:),[],2),[1.65 6]);
-    subplot(6,2,(n-1)*2+2)
+    subplot(3,2,(i-1)*2+2)
     imagesc(zscore(sigpost{n}(ctxA_ind{n},:),[],2),[1.65 6]);
+    i=i+1;
 end
 
+figure;
+i=1;
+for n=[3,5,6]
+    subplot(3,2,(i-1)*2+1)
+    imagesc(zscore(sigpre{n}(ctxA_ind{n},:),[],2),[1.65 6]);
+    subplot(3,2,(i-1)*2+2)
+    imagesc(zscore(sigpost{n}(ctxA_ind{n},:),[],2),[1.65 6]);
+    i=i+1;
+end
+%% Context B cells
 figure;
 for n=1:numel(filenames)
     subplot(6,2,(n-1)*2+1)
