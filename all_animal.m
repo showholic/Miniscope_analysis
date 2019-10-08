@@ -6,7 +6,7 @@ animal=cell(numel(filenames),1);
 for n=1:numel(filenames)
     animal{n}=load(fullfile(filepath,filenames(n).name));
 end
-%%
+%% FLM without motion restriction 
 accuracyA=zeros(numel(filenames),1);
 accuracyB=zeros(numel(filenames),1);
 for n=1:numel(filenames)
