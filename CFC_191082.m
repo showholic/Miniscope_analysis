@@ -2,6 +2,7 @@ clear;
 close all;
 filepath='E:\Miniscope_Chenhaoshan\Results_191082\20190920_181558';
 load(fullfile(filepath,'ms.mat'));
+load(fullfile(filepath,'ms_dff.mat'));
 shockts=readtable(fullfile(filepath,'shock_behavts.csv'));
 ms_start=[19;19;19;20;27;21];
 shock_start=[5425;7227;9029];
@@ -368,6 +369,7 @@ for s=1:3
 end 
 %% Compare FR 
 sig2=ms.sigdeconvolved';
+%sig2=ms_dff.S_dff;
 % All cells
 compare_session_FR(1:size(sig2,1),sig2,session_start,session_end,protocol)
 % Shock activated cells 
