@@ -88,7 +88,28 @@ for n=1:length(behavpos_file)
     axis equal;
     axis tight;
 end
+%%
 
+behav=cell(length(behavpos_file),1);
+%for ns=1:length(behavpos_file)
+ns=1;
+behavts=(0:1/30:(length(behavdata{ns}.x)-1)*(1/30))';
+behavts=behavts-behavts(ms_start(ns));
+behavts(behavts<0)=[];
+mst=double(ms_ts{ns})'/1000;
+behavts(behavts>mst(end)+1/30)=[];
+behavts_ds=behavts(1:3:end);
+siginterp=zeros(size(sig,1),length(behavts_ds));
+
+for i=1:size(sig,1)
+    sigt=sig(i,session_start(ns):session_end(ns));
+    siginterp(i,:)=interp1(mst',sigt,behavts_ds');
+end
+figure;
+subplot(121)
+plot(sig(1,session_start(ns):session_end(ns)));
+subplot(122)
+plot(siginterp(1,:));
 %%
 figure;
 behav=cell(length(behavpos_file),1);
