@@ -1,7 +1,7 @@
 clear;
 addpath('.\Utils');
 filepath='E:\Miniscope_Chenhaoshan\all_animal';
-filenames=dir('E:\Miniscope_Chenhaoshan\all_animal\*.mat');
+filenames=dir('E:\Miniscope_Chenhaoshan\all_animal\processed*.mat');
 animal=cell(numel(filenames),1);
 for n=1:numel(filenames)
     animal{n}=load(fullfile(filepath,filenames(n).name));
@@ -14,11 +14,19 @@ for n=1:numel(filenames)
     
     [accuracyA(n),accuracyB(n)]=predict_ctx(sig,animal{n}.session_start,animal{n}.protocol,animal{n}.ms.ms_ts);
 end
+
+%%
+figure;
+boxplot([accuracyA,accuracyB])
+hold on;
+for i=1:length(accuracyA)
+    plot([1,2],[accuracyA(i),accuracyB(i)],'-o','color','b');
+end
 %% Combine all shock response 
 shock_responsemean=[];
 shock_responsetrial=[];
 SR_ids=cell(numel(filenames),1);
-pre_dur=50; %100 frames= 10s 
+pre_dur=100; %100 frames= 10s 
 post_dur=600;
 shockdayresponse=[];
 preresponse=[];
@@ -30,6 +38,7 @@ for n=1:numel(filenames)
     shock_responsetrial=[shock_responsetrial;shock_response];
     shock_responsemean=[shock_responsemean;meanresponse_shock];
     shockdayresponse=[shockdayresponse; sigt(shock_id,animal{n}.session_start(4)+animal{n}.frame_shock(1)-600:animal{n}.session_start(4)+animal{n}.frame_shock(1)+4000)];
+    
 end
 
 binsize=10;
@@ -92,6 +101,8 @@ hold on;
 cdfplot(ctxp2);
 legend('Pre-conditioning','Post-conditioning');
 [h,p] = kstest2(ctxp1,ctxp2,'Tail','larger');
+xlabel('Context Discrimination Index');
+ylabel('Cumulative distribution');
 %%
 ctxp1=[];
 ctxp2=[];
@@ -249,6 +260,10 @@ for n=1:6
 end
 [~,p1]=ttest(ctxprefpreA_all,ctxprefpostA_all,'tail','right');
 [~,p2]=ttest(ctxprefpreB_all,ctxprefpostB_all,'tail','left');
+xlim([0,3]);
+box off;
+xticks([1 2]);
+xticklabels({'Pre','Post'});
 %% 
 figure;
 hold on;

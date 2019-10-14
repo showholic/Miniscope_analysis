@@ -1,6 +1,6 @@
 clear;
 close all;
-filepath='E:\Miniscope_Chenhaoshan\Results_191082\20190920_181558';
+filepath='D:\Miniscope_Chenhaoshan\Results_191082\20190920_181558';
 load(fullfile(filepath,'ms.mat'));
 load(fullfile(filepath,'ms_dff.mat'));
 shockts=readtable(fullfile(filepath,'shock_behavts.csv'));
@@ -92,7 +92,43 @@ for n=1:length(behavpos_file)
     axis tight;
 end
 
-%%
+%% Method 1: align ms by behavior timestamps 
+behav2=cell(length(behavpos_file),1);
+for ns=1:length(behavpos_file)
+    behavts=(0:1/30:(length(behavdata{ns}.x)-1)*(1/30))';
+    behavts=behavts-behavts(ms_start(ns));
+    behavts(behavts<0)=[];
+    mst=double(ms_ts{ns})'/1000;
+    behavts(behavts>mst(end)+1/30)=[];
+    behavts_ds=behavts(1:3:end);
+    siginterp=zeros(size(sig,1),length(behavts_ds));
+    spkinterp=zeros(size(sig,1),length(behavts_ds));
+    xtemp=behavdata{ns}.x(ismember(behavts_ds,behavts));
+    ytemp=behavdata{ns}.y(ismember(behavts_ds,behavts));
+    stemp=[0;sqrt(diff(ytemp).^2+diff(xtemp).^2)./diff(behavts_ds)];
+    windowSize = 5; 
+    b = (1/windowSize)*ones(1,windowSize);
+    a = 1;
+    sfilt = filter(b,a,stemp);
+    for i=1:size(sig,1)
+        sigt=sig(i,session_start(ns):session_end(ns));
+        spkt=ms_dff.S_dff(i,session_start(ns):session_end(ns));
+        siginterp(i,:)=interp1(mst',sigt,behavts_ds');
+        spkinterp(i,:)=interp1(mst',spkt,behavts_ds');
+    end
+    behav2{ns}.t=behavts_ds;
+    behav2{ns}.x=xtemp;
+    behav2{ns}.y=ytemp;
+    behav2{ns}.s=stemp;
+    behav2{ns}.sf=sfilt;
+    behav2{ns}.sig=siginterp;
+    behav2{ns}.spk=spkinterp;
+    
+end
+
+
+
+%% Method 2: align behavior by ms timestamps 
 figure;
 behav=cell(length(behavpos_file),1);
 for ns=1:length(behavpos_file)
@@ -131,8 +167,9 @@ for ns=1:length(behavpos_file)
 end
 
 
-save('E:\Miniscope_Chenhaoshan\all_animal\processed_191082.mat','shockts','ms_start', ...
-    'shock_start','protocol','ms','session_start','session_end','frame_shock','behav');
+[~,filepart1]=fileparts(fileparts(filepath));
+save(['D:\Miniscope_Chenhaoshan\all_animal\processed' filepart1(end-6:end)],'shockts','ms_start', ...
+    'shock_start','protocol','ms','ms_dff','session_start','session_end','frame_shock','behav','behav2');
 %% Conditioning day
 pre_dur=100; %100 frames= 10s 
 post_dur=100;

@@ -112,6 +112,7 @@ plot(L(ctx_dur:end,1),L(ctx_dur:end,2),'r');
 
 plot(L2(1:ctx_dur,1),L2(1:ctx_dur,2),'b');
 plot(L2(ctx_dur:end,1),L2(ctx_dur:end,2),'r');
+axis off
 %%
 function siginterp=interpsig(sigt,trialname,protocol,ms_ts,ctx_dur)
 

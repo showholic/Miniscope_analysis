@@ -14,8 +14,8 @@ lh2=plot(sigdff(id,:));
 
 
 
-% s_dff=ms_dff.S_dff;
-% s=ms.sigdeconvolved';
+s_dff=ms_dff.S_dff;
+s=ms.sigdeconvolved';
 % figure
 % lh1=plot(s(1,:));
 % lh1.Color=[1,1,0.5,0.5];

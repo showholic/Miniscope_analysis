@@ -1,37 +1,37 @@
 clear;
 addpath('.\Utils');
-filepath='E:\Miniscope_Chenhaoshan\all_animal';
-filenames=dir('E:\Miniscope_Chenhaoshan\all_animal\processed*.mat');
+filepath='D:\Miniscope_Chenhaoshan\all_animal';
+filenames=dir('D:\Miniscope_Chenhaoshan\all_animal\processed*.mat');
 animal=cell(numel(filenames),1);
 for n=1:numel(filenames)
     animal{n}=load(fullfile(filepath,filenames(n).name));
 end
 load(fullfile(filepath,'arena.mat'));
 %% Speed correlation examples
-animaldata=animal{3};
+animaldata=animal{2};
 ns=6;
 sig=animaldata.ms.sigraw';
-sigtemp=sig(:,animaldata.session_start(ns):animaldata.session_start(ns)+2800-1);
+sigtemp=sig(:,animaldata.session_start(ns):animaldata.session_end(ns));
 stemp=animaldata.behav{ns}.sf';
 R=zeros(size(sigtemp,1),1);
 for n=1:size(sigtemp,1)
     rtemp=corrcoef(sigtemp(n,:),stemp);
     R(n)=rtemp(1,2);
 end
-%[Rsort,indsort]=sort(R,'descend');
-% figure;
-% hold on;
-% sigt=sigtemp(indsort(1:10),:);
-% sigt=sigt./max(sigt,[],2);
-% plot((sigt+(1:size(sigt,1))')');
-% yyaxis right;
-% lh=plot(stemp);
-% lh.Color=[0,1,0,0.4];
-% 
-% ylim([0,200]);
+[Rsort,indsort]=sort(R,'descend');
+figure;
+hold on;
+sigt=sigtemp(indsort(1:10),:);
+sigt=sigt./max(sigt,[],2);
+plot((sigt+(1:size(sigt,1))')');
+yyaxis right;
+lh=plot(stemp);
+lh.Color=[0,1,0,0.4];
 
+ylim([0,200]);
 
-speed_threshold=15;
+%%
+speed_threshold=10;
 FI_threshold=10;
 binaryVector = stemp < speed_threshold;
 [labeledVector, numRegions] = bwlabel(binaryVector);
@@ -55,19 +55,19 @@ for k = 1 : numRegions
   end
 end
 
-% figure;
-% hold on;
-% 
-% imagesc(sigtemp(indsort,:),[5 10]);
-% axis tight;
-% for i=1:length(freeze_epoch)
-%     area([freeze_epoch{i}.x1  freeze_epoch{i}.x2],[ylim; ylim],'FaceAlpha',0.4,'FaceColor','r','LineStyle','none')
-% end
-% yyaxis right
-% plot(stemp);
-% plot(xlim,[speed_threshold speed_threshold],'--k');
+figure;
+hold on;
 
+imagesc(sigtemp(indsort,:),[5 10]);
+axis tight;
+for i=1:length(freeze_epoch)
+    area([freeze_epoch{i}.x1  freeze_epoch{i}.x2],[ylim; ylim],'FaceAlpha',0.4,'FaceColor','r','LineStyle','none')
+end
+yyaxis right
+plot(stemp);
+plot(xlim,[speed_threshold speed_threshold],'--k');
 
+%%
 
 sigma=3;
 binsize=20;
@@ -84,7 +84,7 @@ trkytemp=animaldata.behav{ns}.y;
 
 
 sig=animaldata.ms.sigdeconvolved';
-sigtemp=sig(:,animaldata.session_start(ns):animaldata.session_start(ns)+2800-1);
+sigtemp=sig(:,animaldata.session_start(ns):animaldata.session_end(ns));
 maxbatch=1;
 figure('Name',['Session ' num2str(ns)],'NumberTitle','off');
 ha = tight_subplot(maxbatch,10,[.01 .03],[.05 .01],[.01 .01]);
@@ -131,7 +131,8 @@ for nbatch=1:maxbatch
 end
 
 %% Find significant place cells
-ns=2;
+animaldata=animal{2};
+ns=6;
 binsize=20;
 numshuffle=100;
 bwtemp=bw{ns};
@@ -146,7 +147,7 @@ trkytemp=animaldata.behav{ns}.y(1:ctx_dur);
 % figure;
 % plot(trkxtemp,trkytemp);
 
-sig=animaldata.ms.sigdeconvolved';
+sig=animaldata.ms_dff.S_dff;
 sigtemp=sig(:,animaldata.session_start(ns):animaldata.session_start(ns)+ctx_dur-1);
 maxbatch=1;
 
@@ -192,7 +193,7 @@ for i=1:size(sigtemp,1)
         sishuffle(s)=calcSI(sigshuffle,oi,binX,binY,Yedges,Xedges);        
     end
     
-    if si>=1.65*std(sishuffle)+mean(sishuffle)
+    if si>=1.65*std(sishuffle)+mean(sishuffle) %&& si>=0.1
         placecell{npc}.zsmap=zsmap;
         placecell{npc}.si=si;
         placecell{npc}.id=i;
@@ -200,17 +201,27 @@ for i=1:size(sigtemp,1)
     end
 end
 
+
 %% Display place cell place fields 
+placecell2={};
+j=1;
+for i=1:length(placecell)
+    if placecell{i}.si>=0.5
+        placecell2{j}=placecell{i};
+        j=j+1;
+    end
+end
+
 sigma=2.5;
-maxbatch=ceil(length(placecell)/10);
+maxbatch=ceil(length(placecell2)/10);
 figure('Name',['Session ' num2str(ns)],'NumberTitle','off');
 ha = tight_subplot(maxbatch,10,[.01 .01],[.05 .05],[.01 .01]);
-for i=1:length(placecell)
-    zsmapfilt=imgaussfilt(flipud(placecell{i}.zsmap),sigma);
+for i=1:length(placecell2)
+    zsmapfilt=imgaussfilt(flipud(placecell2{i}.zsmap),sigma);
     imagesc(ha(i),zsmapfilt)
     %imagesc(placecell{i}.zsmap)
     axes(ha(i));
     axis square;
     axis off;
 end
-delete(ha(length(placecell)+1:end));
+delete(ha(length(placecell2)+1:end));

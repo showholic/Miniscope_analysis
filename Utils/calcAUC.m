@@ -4,4 +4,5 @@ function FR=calcAUC(sigtt)
     for n=1:size(sigtt,1)
         FR(n)=trapz(sigtt(n,:));
     end
+    FR=FR./size(sigtt,2);
 end

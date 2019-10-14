@@ -17,7 +17,7 @@ function accuracy=fld_withmotion(animal,speed_threshold)
         protocol=animaldata.protocol;
         sig=animaldata.ms.sigraw';
         sigz=zscore(sig,[],2);
-        
+        sigs=animaldata.ms_dff.S_dff;
         
         sigepoch=cell(length(ctx_order),1);
         
@@ -26,8 +26,8 @@ function accuracy=fld_withmotion(animal,speed_threshold)
         for c=1:length(ctx_order)
             ctx_dur=ctx_durall(c);
             ns=find(strcmp(protocol,ctx_order{c})==1);
-            sigtemp=sigz(:,animaldata.session_start(ns):animaldata.session_start(ns)+ctx_dur*10-1);
-
+            %sigtemp=sigz(:,animaldata.session_start(ns):animaldata.session_start(ns)+ctx_dur*10-1);
+            sigtemp=sigs(:,animaldata.session_start(ns):animaldata.session_start(ns)+ctx_dur*10-1);
             stemp=animaldata.behav{ns}.sf(1:ctx_dur*10)';
             
             FI_threshold=10;

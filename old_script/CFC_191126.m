@@ -1,15 +1,12 @@
 clear;
 close all;
-filepath='D:\Miniscope_Chenhaoshan\Results_191087\20190921_150240';
+filepath='E:\Miniscope_Chenhaoshan\Results_191126\20190921_170501';
 load(fullfile(filepath,'ms.mat'));
-load(fullfile(filepath,'ms_dff.mat'));
 shockts=readtable(fullfile(filepath,'shock_behavts.csv'));
-ms_start=[20;20;29;19;20;28];
-shock_start=[5425;7227;9029];
-protocol={'Home','preB','preA','conditioning','postB','postA'};
+ms_start=[0;0;0;20;20;28];
+shock_start=[5426;7227;9029];
+protocol={'Home','preB','preA','conditioning','postA','postB'};
 shock_dur=2/(1/10); %in frames
-
-
 %% Overview
 figure;
 roi=ms.SFP;
@@ -75,10 +72,8 @@ for n=1:length(behavpos_file)
     behavdata{n}.c=str2double(datatemp{3:end,body_ind(3)});
     behavdata{n}.x=str2double(datatemp{3:end,body_ind(1)});
     behavdata{n}.y=str2double(datatemp{3:end,body_ind(2)});
-    behavdata{n}.y(behavdata{n}.y<0)=1;
-    behavdata{n}.x(behavdata{n}.x<0)=1;
     for i=1:length(behavdata{n}.x)
-        if bw{n}(abs(round(behavdata{n}.y(i))),abs(round(behavdata{n}.x(i))))==0
+        if bw{n}(ceil(abs(behavdata{n}.y(i))),ceil(abs(behavdata{n}.x(i))))==0
             try
                 behavdata{n}.x(i)=behavdata{n}.x(i-1);
                 behavdata{n}.y(i)=behavdata{n}.y(i-1);
@@ -94,48 +89,16 @@ for n=1:length(behavpos_file)
     axis tight;
 end
 
-%% Method 1: align ms by behavior timestamps 
-behav2=cell(length(behavpos_file),1);
-for ns=1:length(behavpos_file)
-    behavts=(0:1/30:(length(behavdata{ns}.x)-1)*(1/30))';
-    behavts=behavts-behavts(ms_start(ns));
-    behavts(behavts<0)=[];
-    mst=double(ms_ts{ns})'/1000;
-    behavts(behavts>mst(end)+1/30)=[];
-    behavts_ds=behavts(1:3:end);
-    siginterp=zeros(size(sig,1),length(behavts_ds));
-    spkinterp=zeros(size(sig,1),length(behavts_ds));
-    xtemp=behavdata{ns}.x(ismember(behavts_ds,behavts));
-    ytemp=behavdata{ns}.y(ismember(behavts_ds,behavts));
-    stemp=[0;sqrt(diff(ytemp).^2+diff(xtemp).^2)./diff(behavts_ds)];
-    windowSize = 5; 
-    b = (1/windowSize)*ones(1,windowSize);
-    a = 1;
-    sfilt = filter(b,a,stemp);
-    for i=1:size(sig,1)
-        sigt=sig(i,session_start(ns):session_end(ns));
-        spkt=ms_dff.S_dff(i,session_start(ns):session_end(ns));
-        siginterp(i,:)=interp1(mst',sigt,behavts_ds');
-        spkinterp(i,:)=interp1(mst',spkt,behavts_ds');
-    end
-    behav2{ns}.t=behavts_ds;
-    behav2{ns}.x=xtemp;
-    behav2{ns}.y=ytemp;
-    behav2{ns}.s=stemp;
-    behav2{ns}.sf=sfilt;
-    behav2{ns}.sig=siginterp;
-    behav2{ns}.spk=spkinterp;
-    
-end
-
-
-
-%% Method 2: align behavior by ms timestamps 
+%%
 figure;
 behav=cell(length(behavpos_file),1);
 for ns=1:length(behavpos_file)
     behavts=(0:1/30:(length(behavdata{ns}.x)-1)*(1/30))';
-    behavts=behavts-behavts(ms_start(ns));
+    try
+        behavts=behavts-behavts(ms_start(ns));
+    catch
+        
+    end
     mst=double(ms_ts{ns})'/1000;
     temp1=repmat(behavts,1,length(mst))';
     temp2=abs(temp1-mst);
@@ -168,9 +131,9 @@ for ns=1:length(behavpos_file)
     end
 end
 
-[~,filepart1]=fileparts(fileparts(filepath));
-save(['D:\Miniscope_Chenhaoshan\all_animal\processed' filepart1(end-6:end)],'shockts','ms_start', ...
-    'shock_start','protocol','ms','ms_dff','session_start','session_end','frame_shock','behav','behav2');
+
+save('E:\Miniscope_Chenhaoshan\all_animal\processed_191126.mat','shockts','ms_start', ...
+    'shock_start','protocol','ms','session_start','session_end','frame_shock','behav');       
 %% Conditioning day
 pre_dur=100; %100 frames= 10s 
 post_dur=100;
@@ -309,7 +272,8 @@ hold on;
 area([0; 2],[ax.YLim; ax.YLim],'FaceAlpha',0.2,'FaceColor','r','LineStyle','none')
 title('Mean Response');
 saveas(f,fullfile(filepath,'shock_response.png'))
-
+save('E:\Miniscope_Chenhaoshan\all_animal\processed_191126.mat','shockts','ms_start', ...
+    'shock_start','protocol','ms','shock_response','shock_responsemean');
 %% Use the same baseline 
 baseline_dur=200;
 baseline=avgbinresponse(baseline_dur,binsize,cdn_sig(:,frame_shock(1)-baseline_dur:frame_shock(1)-1));
@@ -376,7 +340,7 @@ v_out=VideoWriter(fullfile(filepath,'Shock_video.avi'),'Uncompressed AVI');
 v_out.FrameRate=10;
 open(v_out);
 figure;
-img=imshow(vid_shock(:,:,1),[0 130]);
+img=imshow(vid_shock(:,:,1),[0 200]);
 axis equal;
 axis tight;
 for i=1:vid_dur
@@ -390,7 +354,7 @@ for i=1:vid_dur
 %             end
 %         end
     elseif i==pre_dur+shock_dur+1
-        delete(sh);
+        delete(sh); 
     end
     writeVideo(v_out,getframe(gca));
 end
@@ -407,26 +371,59 @@ for s=1:3
 end 
 %% Compare FR 
 sig2=ms.sigdeconvolved';
-%sig2=ms_dff.S_dff;
 % All cells
 compare_session_FR(1:size(sig2,1),sig2,session_start,session_end,protocol)
 % Shock activated cells 
 compare_session_FR(SR_id_increase,sig2,session_start,session_end,protocol)
 % Shock decreased cells 
 compare_session_FR(SR_id_decrease,sig2,session_start,session_end,protocol)
-%% Draw Arena
-behav_videofile=dir(fullfile(filepath,'behave_video*.mp4'));
-figure;
-bw=cell(length(behav_videofile),1);
-for n=1:length(behav_videofile)
-    v=VideoReader(fullfile(filepath,behav_videofile(n).name));
-    frame=readFrame(v);
-    imshow(frame);
-    roih=drawpolygon;
-    bw{n}=roipoly(frame,roih.Position(:,1),roih.Position(:,2));
+
+%%
+function compare_session_FR(ids,sig2,session_start,session_end,protocol)
+    FRpreA=calcFR(sig2(ids,session_start(strcmp(protocol,'preA')):session_end(strcmp(protocol,'preA'))));
+    FRpostA=calcFR(sig2(ids,session_start(strcmp(protocol,'postA')):session_end(strcmp(protocol,'postA'))));
+    FRpreB=calcFR(sig2(ids,session_start(strcmp(protocol,'preB')):session_end(strcmp(protocol,'preB'))));
+    FRpostB=calcFR(sig2(ids,session_start(strcmp(protocol,'postB')):session_end(strcmp(protocol,'postB'))));
+    Y=[FRpreB FRpreA FRpostA FRpostB];
+    g={'preB','preA','postA','postB'};
+    %%% 1-way ANOVA
+     
+    % [~,~,stats]=anova1(Y,g);
+    % [c,~,~,gnames] = multcompare(stats);
+
+    % paired T-test
+    [~,p1]=ttest(FRpreA,FRpostA);
+    [~,p2]=ttest(FRpreB,FRpostB);
+    [~,p3]=ttest(FRpreA,FRpreB);
+    [~,p4]=ttest(FRpostA,FRpostB);
+
+    % [p1,h1]=ranksum(FRpreA,FRpostA);
+    % [p2,h2]=ranksum(FRpreB,FRpostB);
+    % [p3,h3]=ranksum(FRpreA,FRpreB);
+    % [p4,h4]=ranksum(FRpostA,FRpostB);
+    group_pair={[2,3],[1,4],[2,1],[3,4]};
+    p_pair=[p1 p2 p3 p4];
+
+    figure
+    boxplot(Y,'Notch','on','Labels',g);
+    hold on;
+    sigstar(group_pair((p_pair<=0.05)),p_pair(p_pair<=0.05));
+    ax=gca;
+    ax.YLim=[0 0.6];
 end
-save(fullfile(filepath,'arena.mat'),'bw');
 
 
 
+function FR=calcFR(sigtt)
+    sigtt(sigtt>0)=1;
+    FR=sum(sigtt,2)/size(sigtt,2);
+end
 
+function binresponse=avgbinresponse(dur,binsize,response)
+    bins=discretize(1:dur,0:binsize:dur);
+    bincount=dur/binsize;
+    binresponse=zeros(size(response,1),bincount);
+    for i = 1:bincount
+        binresponse(:,i)=mean(response(:,bins==i),2);
+    end
+end
